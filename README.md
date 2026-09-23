@@ -1,3 +1,70 @@
+# nostr-leaderboard
+
+The leaderboard website for [sm64-nostr](https://github.com/wScottSh/sm64-nostr): airgapped Super Mario 64
+cabinets that sign every star grab on the N64 as a Nostr event and show it as a QR code. The sm64-nostr
+reader page broadcasts those events to relays; **this site reads them back, verifies them, and ranks them.**
+
+Static site, no server. Every run is checked in the browser: the NIP-01 id is recomputed from the event's own
+fields and the BIP-340 Schnorr signature is verified against the cabinet's pubkey. Anything that fails is
+counted as rejected and never displayed.
+
+## What it shows
+
+- **Cabinets** — one per signing key + signed event name (`["n", ...]` tag). A cabinet is one ROM build for one
+  event, never a player.
+- **Star boards** — per cabinet, one board per star (course + star index), in game order: best time, most coins,
+  run count.
+- **Runs** — per star, ranked fastest first (in-course frames at 30 fps, shown as the in-game `M'SS"cc`); untimed
+  runs (`frames: 0`, e.g. Toad stars) sort last; coins break ties. Each run expands to its raw signed event.
+
+## Event contract (from sm64-nostr format v3)
+
+Query: `{"kinds":[8064], "#t":["ag-lb"]}`. A run is accepted only if its id and signature verify and it has
+`["t","ag-lb"]`, `["t","sm64"]`, exactly one `["n","<EVENT NAME>"]`, and content
+`{"course","act","coins","frames","nonce","keyId"}` with in-range integers. `created_at` is the ROM's build
+epoch, not the time of the run (the N64 has no clock).
+
+## Trust: the allowlist
+
+A signature proves only *origin* — "produced by the ROM built with this key" — not honest play, and anyone can
+build a ROM with their own key. So which cabinets count is the operator's call: list the keys you vouch for in
+[`public/cabinets.json`](public/cabinets.json):
+
+```json
+{ "cabinets": [ { "pubkey": "<64-char hex from the build wizard / keys/registry.md>",
+                  "name": "SUMMER JAM 2026", "label": "Summer Jam @ The Arcade" } ] }
+```
+
+`name` (optional) pins the entry to one event name; `label` (optional) is the display name. Listed cabinets show
+by default; other validly signed cabinets are behind a "show unlisted" toggle. While the list is empty, every
+valid cabinet is shown with a warning banner.
+
+## Develop
+
+```
+npm install
+npm test            # verifier/model/relay tests, incl. a real ROM-pipeline-signed event
+npm run dev         # http://localhost:8064
+npm run demo-relay  # ws://localhost:7777 with signed demo runs + one forgery;
+                    # add it on the site's "relays" page to see data before real cabinets publish
+npm run build       # -> dist/
+```
+
+Default relays: `relay.damus.io` (where the sm64-nostr reader broadcasts), `nos.lol`, `relay.primal.net`.
+Visitors can change them on the relays page (stored in their browser only).
+
+## Deploy
+
+`.github/workflows/pages.yml` tests, builds, and publishes `dist/` to GitHub Pages on every push to `master`.
+One-time setup: repo Settings → Pages → Source = **GitHub Actions**.
+
+---
+
+## Original concept doc
+
+> Superseded by the sm64-nostr design (kind 8064, format v3, phone-camera reader). Kept for history; the event
+> schema below (kind 33334, `NOSTR-EVENT:1:` QR prefix) is **not** what cabinets emit.
+
 **TL;DR:** Here is the complete, self-contained handoff package: (1) a full user story written in plain English for any AI/agent, and (2) a rigorous, first-principles implementation specification that dissolves every dependency (no clock, no eternal web pages, no client assumptions) using only NOSTR primitives (NIP-01 + NIP-133 kind 33334), monotonic counters, prefixed QR text, physical paper redundancy, and one-time Arweave upload. Copy-paste both sections directly to any AI coder with zero prior context—they contain every detail needed to build the arcade machine firmware, QR generator, broadcaster, and indexer logic.
 
 ### Complete User Story

@@ -1,0 +1,4 @@
+{
+  "_comment": "Operator allowlist. Add one entry per event ROM build you vouch for: pubkey = the 64-char hex x-only key the build wizard prints (keys/registry.md in sm64-nostr); name (optional) pins the entry to one signed event name; label (optional) is the display name. Runs from any other key are shown as 'unlisted'. While this list is empty, every validly signed cabinet is shown.",
+  "cabinets": []
+}

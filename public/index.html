@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SM64 Nostr Leaderboard</title>
+<meta name="description" content="Star times from airgapped Super Mario 64 cabinets, signed on the N64 and verified in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⭐</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/"><span class="star">★</span> SM64 <span class="accent">Nostr</span> Leaderboard</a>
+  <a class="about" href="#/about">How it works</a>
+</header>
+<div id="status" class="status"></div>
+<main id="app"><noscript>This leaderboard verifies signatures in your browser and needs JavaScript.</noscript></main>
+<footer>Every run is verified client-side against its cabinet's Schnorr signature. No server, no accounts.
+  · <a href="https://github.com/wScottSh/nostr-leaderboard">source</a></footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>

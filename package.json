@@ -1,0 +1,20 @@
+{
+  "name": "nostr-leaderboard",
+  "private": true,
+  "type": "module",
+  "description": "Leaderboard website for sm64-nostr airgapped QR cabinets (kind 8064).",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --serve",
+    "test": "node --test test/*.test.mjs",
+    "demo-relay": "node scripts/demo-relay.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "ws": "^8.21.3"
+  }
+}
