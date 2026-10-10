@@ -201,11 +201,13 @@ function boardHtml(c) {
   return `
     <section class="card hero">
       <nav class="hero-bar"><a href="#/">‹<span> all builds</span></a><span class="relay-dot" title=""><i></i><span></span></span></nav>
+      <div class="hero-main">
       <div class="logo">${[...'MARIO 64'].map((ch, i) => `<span style="color:${LOGO_COLORS[i % 4]}">${ch}</span>`).join('')}<span class="l2">BINGO</span></div>
       <div class="build-title">${esc(buildTitle(c))}${c.listed || state.allowlist.length === 0 ? '' : ` ${listedBadge(c)}`}</div>
       <div class="count"><span class="n">0</span><small> / ${TOTAL_STARS}</small></div>
       <div class="meter"><i></i></div>
       <div class="ticker"></div>
+      </div>
     </section>
     ${GROUPS.map(
       (g) => `

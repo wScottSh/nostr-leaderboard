@@ -181,6 +181,19 @@ body.board-route main { max-width: none; margin: 0; padding: 0; }
   --ac: var(--gold); justify-content: center; align-items: center; text-align: center; gap: calc(var(--g) * 1.5);
   overflow: hidden; background: #ffffff08; box-shadow: none;
 }
+.hero-main { display: contents; }
+/* A hero spanning several columns is a short wide banner; stacked, its title and ticker get squeezed out. */
+@container (min-aspect-ratio: 3/1) {
+  .hero-main {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 6cqh; width: 100%; padding: 0 6cqh;
+    grid-template-areas: 'logo title' 'logo count' 'logo meter' 'logo ticker';
+  }
+  .hero-main .logo { grid-area: logo; font-size: min(15cqw, 34cqh); }
+  .hero-main .build-title { grid-area: title; font-size: 12cqh; max-width: none; text-align: left; }
+  .hero-main .count { grid-area: count; font-size: 20cqh; text-align: left; }
+  .hero .hero-main .meter { grid-area: meter; width: 100%; height: max(6px, 5cqh); margin: 3cqh 0; }
+  .hero-main .ticker { grid-area: ticker; font-size: 10cqh; max-width: none; text-align: left; }
+}
 .hero-bar {
   position: absolute; top: var(--p); left: var(--p); right: var(--p); display: flex; justify-content: space-between; align-items: center;
   font-size: clamp(10px, min(3.4cqw, 6cqh), 14px); font-weight: 800;
