@@ -71,11 +71,6 @@ export function starName(course, keyId) {
   return `Star ${keyId + 1}`;
 }
 
-/** Sort key so boards list stars in game order: main courses, bonus, then castle. */
-export function starOrder(course, keyId) {
-  return (course === 0 ? 100 : course) * 16 + keyId;
-}
-
 /**
  * formatFrames: in-course frames -> the in-game timer's own M'SS"cc shape.
  * 0 is the cabinet's "no in-course time" sentinel (format-v3 spec 3.5).

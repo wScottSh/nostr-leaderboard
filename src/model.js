@@ -11,7 +11,6 @@
  *    the published allowlist (cabinets.json).
  */
 import { verifyEvent } from './verify.js';
-import { starOrder } from './stars.js';
 
 export const KIND = 8064;
 export const CLASS_TAG = 'ag-lb'; // event_id.h PIPELINE_EVENT_TAG0_VALUE
@@ -74,6 +73,11 @@ export function compareRuns(a, b) {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+/** The operator allowlist entry vouching for a build, if any. */
+export function allowlistEntry(allowlist, pubkey, eventName) {
+  return allowlist.find((a) => a.pubkey === pubkey && (!a.name || a.name === eventName));
+}
+
 /**
  * buildIndex: dedupes runs by id and groups them into cabinets. Each cabinet
  * is marked `listed` when the operator allowlist names its pubkey (and, if the
@@ -88,7 +92,7 @@ export function buildIndex(runs, allowlist = []) {
     const key = cabinetKey(r.pubkey, r.eventName);
     let cab = cabinets.get(key);
     if (!cab) {
-      const entry = allowlist.find((a) => a.pubkey === r.pubkey && (!a.name || a.name === r.eventName));
+      const entry = allowlistEntry(allowlist, r.pubkey, r.eventName);
       cab = {
         key,
         pubkey: r.pubkey,
@@ -105,19 +109,4 @@ export function buildIndex(runs, allowlist = []) {
   return [...cabinets.values()].sort(
     (a, b) => Number(b.listed) - Number(a.listed) || b.runs.length - a.runs.length || a.key.localeCompare(b.key),
   );
-}
-
-/**
- * starBoards: runs -> one board per (course, keyId), each ranked by
- * compareRuns, boards in game order.
- */
-export function starBoards(runs) {
-  const boards = new Map();
-  for (const r of runs) {
-    const key = `${r.course}-${r.keyId}`;
-    if (!boards.has(key)) boards.set(key, { key, course: r.course, keyId: r.keyId, runs: [] });
-    boards.get(key).runs.push(r);
-  }
-  for (const b of boards.values()) b.runs.sort(compareRuns);
-  return [...boards.values()].sort((a, b) => starOrder(a.course, a.keyId) - starOrder(b.course, b.keyId));
 }

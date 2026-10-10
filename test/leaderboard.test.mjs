@@ -5,7 +5,7 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
 import { computeEventId, verifyEvent } from '../src/verify.js';
-import { parseRun, buildIndex, starBoards, compareRuns } from '../src/model.js';
+import { parseRun, buildIndex, compareRuns } from '../src/model.js';
 import { formatFrames, starName } from '../src/stars.js';
 
 const cabinetEvent = JSON.parse(readFileSync(new URL('./fixtures/cabinet_event.json', import.meta.url))).event;
@@ -92,18 +92,6 @@ test('groups by cabinet (pubkey + event name), dedupes by id, honors allowlist',
 
   const nameScoped = buildIndex([r1], [{ pubkey: pk, name: 'SOME OTHER EVENT' }]);
   assert.equal(nameScoped[0].listed, false);
-});
-
-test('star boards in game order, each ranked', () => {
-  const runs = [
-    signRun({ course: 0, keyId: 3, frames: 400, nonce: 1 }),
-    signRun({ course: 1, keyId: 0, frames: 900, nonce: 2 }),
-    signRun({ course: 1, keyId: 0, frames: 700, nonce: 3 }),
-    signRun({ course: 19, keyId: 1, frames: 500, nonce: 4 }),
-  ].map(parseRun);
-  const boards = starBoards(runs);
-  assert.deepEqual(boards.map((b) => b.key), ['1-0', '19-1', '0-3']);
-  assert.deepEqual(boards[0].runs.map((r) => r.frames), [700, 900]);
 });
 
 test('formats frames like the in-game timer and names stars', () => {
