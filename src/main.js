@@ -1,5 +1,5 @@
 /*
- * main.js -- the page. Loads the operator allowlist, queries relays, verifies
+ * main.js -- the page. Loads the operator allowlist, subscribes to relays, verifies
  * every event (model.parseRun), and renders cabinets -> star boards -> runs.
  * Routing is hash-based so the whole site is static files:
  *   #/                                  cabinet list
@@ -7,7 +7,7 @@
  *   #/c/<pubkey>/<event name>/<c>-<k>   one star's ranked runs
  */
 import { parseRun, buildIndex, starBoards, cabinetKey } from './model.js';
-import { buildFilter, queryRelays, DEFAULT_RELAYS } from './relay.js';
+import { buildFilter, subscribe, DEFAULT_RELAYS } from './relay.js';
 import { COURSES, courseName, starName, formatFrames } from './stars.js';
 
 const RELAYS_KEY = 'sm64lb.relays';
@@ -19,8 +19,8 @@ const state = {
   runs: new Map(), // id -> run
   rejectedSeen: new Set(), // fingerprints of invalid events, so relay echoes count once
   rejected: 0,
-  relayResults: [],
-  loading: false,
+  relayStatus: new Map(), // url -> { state, synced, error }
+  subscription: null,
   showUnlisted: false,
 };
 
@@ -46,36 +46,45 @@ async function loadAllowlist() {
   }
 }
 
-async function refresh() {
-  if (state.loading) return;
-  state.loading = true;
-  state.relayResults = [];
-  renderStatus();
-  let pending = 0;
-  const flush = () => {
-    pending = 0;
+let renderPending = 0;
+function scheduleRender() {
+  if (!renderPending) renderPending = setTimeout(() => {
+    renderPending = 0;
     render();
-  };
-  state.relayResults = await queryRelays(getRelays(), buildFilter(), (ev) => {
-    // Dedupe only on VERIFIED ids: an event's id is just a claim until
-    // parseRun checks it, so a forgery reusing a real run's id must not be
-    // able to shadow the genuine event by arriving first.
-    if (!ev || typeof ev.id !== 'string' || state.runs.has(ev.id)) return;
-    const run = parseRun(ev);
-    if (run) state.runs.set(run.id, run);
-    else {
-      const fingerprint = `${ev.id}:${ev.sig}:${ev.content}`;
-      if (!state.rejectedSeen.has(fingerprint)) {
-        state.rejectedSeen.add(fingerprint);
-        state.rejected++;
-      }
-    }
-    // Coalesce re-renders while events stream in.
-    if (!pending) pending = setTimeout(flush, 150);
-  });
-  state.loading = false;
-  render();
+  }, 150);
 }
+
+function ingest(ev) {
+  // Dedupe only on VERIFIED ids: an event's id is just a claim until
+  // parseRun checks it, so a forgery reusing a real run's id must not be
+  // able to shadow the genuine event by arriving first.
+  if (!ev || typeof ev.id !== 'string' || state.runs.has(ev.id)) return;
+  const run = parseRun(ev);
+  if (run) state.runs.set(run.id, run);
+  else {
+    const fingerprint = `${ev.id}:${ev.sig}:${ev.content}`;
+    if (!state.rejectedSeen.has(fingerprint)) {
+      state.rejectedSeen.add(fingerprint);
+      state.rejected++;
+    }
+  }
+  scheduleRender();
+}
+
+function startSubscription() {
+  state.subscription?.close();
+  const relays = getRelays();
+  state.relayStatus = new Map(relays.map((url) => [url, { state: 'connecting', synced: false }]));
+  state.subscription = subscribe(relays, buildFilter(), {
+    onEvent: ingest,
+    onStatus: (url, status) => {
+      state.relayStatus.set(url, status);
+      scheduleRender();
+    },
+  });
+}
+
+const loading = () => [...state.relayStatus.values()].some((s) => !s.synced);
 
 function cabinets() {
   return buildIndex([...state.runs.values()], state.allowlist);
@@ -85,18 +94,17 @@ function renderStatus() {
   const relays = getRelays();
   const chips = relays
     .map((url) => {
-      const r = state.relayResults.find((x) => x.relay === url);
-      const cls = !r ? 'pending' : r.ok ? 'ok' : 'bad';
-      const title = !r ? 'querying…' : r.ok ? `${r.count} events` : r.error;
+      const r = state.relayStatus.get(url);
+      const cls = !r || r.state === 'connecting' ? 'pending' : r.state === 'live' ? 'ok' : 'bad';
+      const title = !r || r.state === 'connecting' ? 'connecting…' : r.state === 'live' ? 'live' : r.error;
       return `<span class="chip ${cls}" title="${esc(title)}">${esc(url.replace(/^wss:\/\//, ''))}</span>`;
     })
     .join('');
   statusEl.innerHTML = `
     <div class="chips">${chips}</div>
     <div class="counts">
-      ${state.loading ? '<span class="spin">★</span> querying relays · ' : ''}
+      ${loading() ? '<span class="spin">★</span> loading · ' : ''}
       <b>${state.runs.size}</b> verified runs${state.rejected ? ` · <span title="bad signature, wrong shape, or not sm64">${state.rejected} rejected</span>` : ''}
-      · <button class="link" data-action="refresh">refresh</button>
       · <button class="link" data-action="settings">relays</button>
     </div>`;
 }
@@ -124,7 +132,7 @@ function renderHome() {
       anyone can build a ROM. <a href="#/about">Why this matters</a>.</p>`;
   }
   if (!shown.length) {
-    html += state.loading
+    html += loading()
       ? '<p class="empty">Looking for star captures…</p>'
       : `<p class="empty">No ${noAllowlist ? '' : 'listed '}cabinet runs found on these relays yet.</p>`;
   } else {
@@ -165,7 +173,7 @@ function cabinetHeader(cab) {
 
 function renderCabinet(r) {
   const cab = findCabinet(r);
-  if (!cab) return state.loading ? '<p class="empty">Loading…</p>' : '<p class="empty">No runs for this cabinet on these relays. <a href="#/">Back</a></p>';
+  if (!cab) return loading() ? '<p class="empty">Loading…</p>' : '<p class="empty">No runs for this cabinet on these relays. <a href="#/">Back</a></p>';
   if (r.star) return renderStar(cab, r.star);
 
   const boards = starBoards(cab.runs);
@@ -263,8 +271,7 @@ function render() {
 
 document.addEventListener('click', (e) => {
   const action = e.target.closest('[data-action]')?.dataset.action;
-  if (action === 'refresh') refresh();
-  else if (action === 'settings') location.hash = '#/relays';
+  if (action === 'settings') location.hash = '#/relays';
   else if (action === 'save-relays' || action === 'reset-relays') {
     if (action === 'reset-relays') localStorage.removeItem(RELAYS_KEY);
     else {
@@ -272,7 +279,7 @@ document.addEventListener('click', (e) => {
       localStorage.setItem(RELAYS_KEY, JSON.stringify(urls));
     }
     location.hash = '#/';
-    refresh();
+    startSubscription();
   } else if (!action) {
     const row = e.target.closest('tr[data-href]');
     if (row && !e.target.closest('a')) location.hash = row.dataset.href;
@@ -292,5 +299,5 @@ window.addEventListener('hashchange', () => {
 (async () => {
   state.allowlist = await loadAllowlist();
   render();
-  refresh();
+  startSubscription();
 })();

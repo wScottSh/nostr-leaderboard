@@ -7,7 +7,6 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { computeEventId, verifyEvent } from '../src/verify.js';
 import { parseRun, buildIndex, starBoards, compareRuns } from '../src/model.js';
 import { formatFrames, starName } from '../src/stars.js';
-import { buildFilter, queryRelay } from '../src/relay.js';
 
 const cabinetEvent = JSON.parse(readFileSync(new URL('./fixtures/cabinet_event.json', import.meta.url))).event;
 
@@ -116,34 +115,4 @@ test('formats frames like the in-game timer and names stars', () => {
   assert.equal(starName(1, 6), '100 Coins');
   assert.equal(starName(0, 4), 'MIPS Star 2');
   assert.equal(starName(19, 1), 'Under 21 Seconds');
-});
-
-test('queryRelay sends REQ, streams EVENTs, resolves on EOSE', async () => {
-  const sent = [];
-  class FakeWS {
-    constructor(url) {
-      this.url = url;
-      this.readyState = 1;
-      setTimeout(() => this.onopen(), 0);
-    }
-    send(s) {
-      const msg = JSON.parse(s);
-      sent.push(msg);
-      if (msg[0] === 'REQ') {
-        const sub = msg[1];
-        setTimeout(() => {
-          this.onmessage({ data: JSON.stringify(['EVENT', sub, cabinetEvent]) });
-          this.onmessage({ data: JSON.stringify(['EVENT', 'someone-else', {}]) });
-          this.onmessage({ data: JSON.stringify(['EOSE', sub]) });
-        }, 0);
-      }
-    }
-    close() { this.readyState = 3; }
-  }
-  const got = [];
-  const res = await queryRelay('wss://fake', buildFilter(), (ev) => got.push(ev), { WebSocketImpl: FakeWS });
-  assert.deepEqual(res, { relay: 'wss://fake', ok: true, count: 1, error: undefined });
-  assert.equal(got.length, 1);
-  assert.deepEqual(sent[0][2], { kinds: [8064], '#t': ['ag-lb'], limit: 5000 });
-  assert.equal(sent.at(-1)[0], 'CLOSE');
 });

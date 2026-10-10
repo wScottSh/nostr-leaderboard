@@ -1,8 +1,8 @@
 /*
- * relay.js -- one-shot NIP-01 query: open each relay, send REQ, collect EVENTs
- * until EOSE (or timeout), close. Results stream through onEvent so the page
- * can render as relays answer; duplicates across relays are the caller's to
- * dedupe (by id).
+ * relay.js -- live NIP-01 subscription. Each relay keeps its REQ open after
+ * EOSE so new EVENTs stream in, and a dropped relay reconnects with
+ * exponential backoff. Duplicates across relays (and replays after a
+ * reconnect) are the caller's to dedupe.
  */
 
 export const DEFAULT_RELAYS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net'];
@@ -14,56 +14,100 @@ export function buildFilter({ authors } = {}) {
 }
 
 /**
- * queryRelay: resolves { relay, ok, count, error } once the relay sends EOSE,
- * errors, closes, or timeoutMs elapses. Never rejects.
+ * subscribe: opens every relay and keeps it open until close().
+ *
+ * onStatus(url, { state, synced, error }) fires on every change. state is
+ * 'connecting' | 'live' | 'error'. synced turns true once the relay has
+ * finished its first answer (EOSE, a failure, or eoseTimeoutMs without EOSE)
+ * and stays true, so "every relay synced" marks the end of the initial load.
  */
-export function queryRelay(url, filter, onEvent, { timeoutMs = 8000, WebSocketImpl = globalThis.WebSocket } = {}) {
-  return new Promise((resolve) => {
-    const subId = 'lb' + Math.random().toString(36).slice(2, 10);
-    let count = 0;
-    let settled = false;
-    let ws;
-    const done = (ok, error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try {
-        if (ws.readyState === 1) ws.send(JSON.stringify(['CLOSE', subId]));
-        ws.close();
-      } catch { /* already closed */ }
-      resolve({ relay: url, ok, count, error });
+export function subscribe(
+  urls,
+  filter,
+  {
+    onEvent,
+    onStatus = () => {},
+    WebSocketImpl = globalThis.WebSocket,
+    minDelayMs = 1000,
+    maxDelayMs = 30000,
+    eoseTimeoutMs = 8000,
+  },
+) {
+  let closed = false;
+  const relays = urls.map((url) => {
+    const relay = { url, ws: null, subId: null, timer: null, eoseTimer: null, attempt: 0, status: { state: 'connecting', synced: false } };
+    const setStatus = (patch) => {
+      relay.status = { ...relay.status, ...patch };
+      onStatus(url, relay.status);
     };
-    const timer = setTimeout(() => done(count > 0, 'timed out'), timeoutMs);
-    try {
-      ws = new WebSocketImpl(url);
-    } catch (e) {
-      clearTimeout(timer);
-      resolve({ relay: url, ok: false, count, error: String(e.message || e) });
-      return;
-    }
-    ws.onopen = () => ws.send(JSON.stringify(['REQ', subId, filter]));
-    ws.onmessage = (msg) => {
-      let data;
+    const markSynced = () => {
+      clearTimeout(relay.eoseTimer);
+      if (!relay.status.synced) setStatus({ synced: true });
+    };
+
+    const connect = () => {
+      if (closed) return;
+      const subId = (relay.subId = 'lb' + Math.random().toString(36).slice(2, 10));
+      let ws = null;
+      let dropped = false;
+      const drop = (error) => {
+        if (dropped || closed) return;
+        dropped = true;
+        try {
+          ws?.close();
+        } catch { /* already closed */ }
+        const delay = Math.min(maxDelayMs, minDelayMs * 2 ** relay.attempt++);
+        setStatus({ state: 'error', synced: true, error });
+        clearTimeout(relay.eoseTimer);
+        relay.timer = setTimeout(connect, delay);
+      };
+
+      setStatus({ state: 'connecting', error: undefined });
       try {
-        data = JSON.parse(msg.data);
-      } catch {
+        ws = relay.ws = new WebSocketImpl(url);
+      } catch (e) {
+        drop(String(e.message || e));
         return;
       }
-      if (!Array.isArray(data) || data[1] !== subId) return;
-      if (data[0] === 'EVENT') {
-        count++;
-        onEvent(data[2], url);
-      } else if (data[0] === 'EOSE') {
-        done(true);
-      } else if (data[0] === 'CLOSED') {
-        done(false, data[2] || 'closed by relay');
-      }
+      if (!relay.status.synced) relay.eoseTimer = setTimeout(markSynced, eoseTimeoutMs);
+      ws.onopen = () => ws.send(JSON.stringify(['REQ', subId, filter]));
+      ws.onmessage = (msg) => {
+        if (closed) return;
+        let data;
+        try {
+          data = JSON.parse(msg.data);
+        } catch {
+          return;
+        }
+        if (!Array.isArray(data) || data[1] !== subId) return;
+        if (data[0] === 'EVENT') onEvent(data[2], url);
+        else if (data[0] === 'EOSE') {
+          relay.attempt = 0;
+          markSynced();
+          setStatus({ state: 'live' });
+        } else if (data[0] === 'CLOSED') drop(data[2] || 'closed by relay');
+      };
+      ws.onerror = () => drop('connection error');
+      ws.onclose = () => drop('connection closed');
     };
-    ws.onerror = () => done(false, 'connection error');
-    ws.onclose = () => done(count > 0, count > 0 ? undefined : 'connection closed');
-  });
-}
 
-export function queryRelays(urls, filter, onEvent, opts) {
-  return Promise.all(urls.map((u) => queryRelay(u, filter, onEvent, opts)));
+    connect();
+    return relay;
+  });
+
+  return {
+    close() {
+      closed = true;
+      for (const relay of relays) {
+        clearTimeout(relay.timer);
+        clearTimeout(relay.eoseTimer);
+        const ws = relay.ws;
+        if (!ws) continue;
+        try {
+          if (ws.readyState === 1) ws.send(JSON.stringify(['CLOSE', relay.subId]));
+          ws.close();
+        } catch { /* already closed */ }
+      }
+    },
+  };
 }
