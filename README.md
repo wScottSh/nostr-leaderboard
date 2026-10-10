@@ -1,21 +1,44 @@
 # nostr-leaderboard
 
-The leaderboard website for [sm64-nostr](https://github.com/wScottSh/sm64-nostr): airgapped Super Mario 64
-cabinets that sign every star grab on the N64 as a Nostr event and show it as a QR code. The sm64-nostr
-reader page broadcasts those events to relays; **this site reads them back, verifies them, and ranks them.**
+The Mario 64 Bingo website for [sm64-nostr](https://github.com/wScottSh/sm64-nostr): airgapped Super Mario 64
+cabinets that sign every star grab on the N64 as a Nostr event and show it as a QR code. The
+scanner (nostr-leaderboard-scanner) broadcasts those events to relays; **this site reads them back live, verifies them, and fills in each
+build's 120-star bingo board.**
 
-Static site, no server. Every run is checked in the browser: the NIP-01 id is recomputed from the event's own
-fields and the BIP-340 Schnorr signature is verified against the cabinet's pubkey. Anything that fails is
+Static site, no server. Every claim is checked in the browser: the NIP-01 id is recomputed from the event's own
+fields and the BIP-340 Schnorr signature is verified against the build's pubkey. Anything that fails is
 counted as rejected and never displayed.
 
 ## What it shows
 
-- **Cabinets** — one per signing key + signed event name (`["n", ...]` tag). A cabinet is one ROM build for one
-  event, never a player.
-- **Star boards** — per cabinet, one board per star (course + star index), in game order: best time, most coins,
-  run count.
-- **Runs** — per star, ranked fastest first (in-course frames at 30 fps, shown as the in-game `M'SS"cc`); untimed
-  runs (`frames: 0`, e.g. Toad stars) sort last; coins break ties. Each run expands to its raw signed event.
+- **Builds.** One per signing key + signed event name (`["n", ...]` tag). A build is one ROM build for one
+  event, never a player. The home page lists every build with its stars collected out of 120 and its claim count.
+- **Bingo board.** Per build, a full-screen board of the 120 stars: 15 courses x 7 (six acts + 100 coins), Castle
+  Secrets (Toad, MIPS, the slide), and Secret Levels (cap stages, aquarium, rainbow, the three Bowser stages). A
+  star is collected once the build has at least one verified claim for it. The board picks its card and tile
+  layout for any window shape.
+- **Claims.** Per star, every verified claim on that build, fastest first (in-course frames at 30 fps, shown as the
+  in-game `M'SS"cc`); untimed claims (`frames: 0`, e.g. Toad stars) sort last; coins break ties. Each claim
+  expands to its raw signed event. Stars outside the 120 still get a claim page but never count toward the board.
+  `created_at` is the ROM build time, so claims have no "first claimer" order.
+- **Live.** The relay subscription stays open after the initial load and reconnects dropped relays with
+  backoff. A star collected after the page loaded pops on the board and shows in the board's ticker.
+
+## Routes
+
+| Hash | Page |
+|---|---|
+| `#/` | All builds |
+| `#/c/<pubkey>/<event name>` | That build's bingo board |
+| `#/c/<pubkey>/<event name>/<course>-<keyId>` | One star's claims on that build (the scanner links here) |
+| `#/about` | How it works |
+| `#/relays` | Relay list; saving reconnects |
+
+## Known gap
+
+The Bowser in the Sky Grand Star goes through the same ROM star-grab handler as every other star
+(`bhvGrandStar` uses `INTERACT_STAR_OR_KEY`), so it probably reports as course 18 star 0, the same key as the
+BITS red-coin star. On the board the two would be one tile. Unconfirmed; it needs a ROM run.
 
 ## Event contract (from sm64-nostr format v3)
 
@@ -27,7 +50,7 @@ epoch, not the time of the run (the N64 has no clock).
 ## Trust: the allowlist
 
 A signature proves only *origin* — "produced by the ROM built with this key" — not honest play, and anyone can
-build a ROM with their own key. So which cabinets count is the operator's call: list the keys you vouch for in
+build a ROM with their own key. So which builds count is the operator's call: list the keys you vouch for in
 [`public/cabinets.json`](public/cabinets.json):
 
 ```json
@@ -35,18 +58,18 @@ build a ROM with their own key. So which cabinets count is the operator's call: 
                   "name": "SUMMER JAM 2026", "label": "Summer Jam @ The Arcade" } ] }
 ```
 
-`name` (optional) pins the entry to one event name; `label` (optional) is the display name. Listed cabinets show
-by default; other validly signed cabinets are behind a "show unlisted" toggle. While the list is empty, every
-valid cabinet is shown with a warning banner.
+`name` (optional) pins the entry to one event name; `label` (optional) is the display name. Listed builds show
+by default; other validly signed builds are behind a "show unlisted" toggle. While the list is empty, every
+valid build is shown with a warning banner.
 
 ## Develop
 
 ```
 npm install
-npm test            # verifier/model/relay tests, incl. a real ROM-pipeline-signed event
+npm test            # verifier/model/board/relay tests, incl. a real ROM-pipeline-signed event
 npm run dev         # http://localhost:8064
-npm run demo-relay  # ws://localhost:7777 with signed demo runs + one forgery;
-                    # add it on the site's "relays" page to see data before real cabinets publish
+npm run demo-relay  # ws://localhost:7777 with signed demo claims + one forgery, plus a new
+                    # live claim every 6 s; add it on the site's "relays" page
 npm run build       # -> dist/
 ```
 
