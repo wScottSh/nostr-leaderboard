@@ -245,6 +245,14 @@ body.board-route:has(.bingo.scroll) { height: auto; overflow: visible; }
 .bingo.scroll .meter { grid-area: meter; width: 100%; height: 6px; margin: 4px 0; }
 .bingo.scroll .ticker { grid-area: ticker; max-width: none; font-size: 13px; line-height: 22px; }
 .ticker.jump { cursor: pointer; }
+@media (max-height: 500px) {
+  .bingo.scroll .hero {
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas: 'back logo title count dot' 'meter meter meter meter meter' 'ticker ticker ticker ticker ticker';
+  }
+  .bingo.scroll .build-title { text-align: center; }
+  .bingo.scroll .tile { scroll-margin-top: 110px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .tile.fresh, .relay-dot.live i, .hero.blackout .logo .l2, .spin { animation: none; }
