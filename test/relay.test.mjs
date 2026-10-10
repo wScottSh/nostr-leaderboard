@@ -107,11 +107,13 @@ test('a relay that fails before EOSE still counts as synced', async () => {
   sub.close();
 });
 
-test('close() unsubscribes, drops late events, and stops reconnecting', async () => {
+test('close() unsubscribes, goes silent, and stops reconnecting', async () => {
   const { sockets, FakeWS } = fakeRelay();
   const got = [];
+  let statusCalls = 0;
   const sub = subscribe(['wss://a', 'wss://b'], buildFilter(), {
     onEvent: (ev) => got.push(ev.id),
+    onStatus: () => statusCalls++,
     WebSocketImpl: FakeWS,
     minDelayMs: 5,
   });
@@ -119,6 +121,7 @@ test('close() unsubscribes, drops late events, and stops reconnecting', async ()
   const [a, b] = sockets;
   const subA = a.subId;
   sub.close();
+  const callsAtClose = statusCalls;
   assert.deepEqual(a.sent.at(-1), ['CLOSE', subA]);
   assert.ok(a.closed && b.closed);
 
@@ -126,5 +129,6 @@ test('close() unsubscribes, drops late events, and stops reconnecting', async ()
   b.onclose();
   await tick(30);
   assert.deepEqual(got, []);
+  assert.equal(statusCalls, callsAtClose, 'no status updates after close');
   assert.equal(sockets.length, 2, 'no reconnect after close');
 });
