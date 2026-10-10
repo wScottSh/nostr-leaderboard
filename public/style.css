@@ -211,6 +211,41 @@ body.board-route main { max-width: none; margin: 0; padding: 0; }
 }
 @keyframes shimmer { to { background-position: 300% 0; } }
 
+/* Scroll mode: fit() found no readable fullscreen grid (phones), so cards stack under a sticky header. */
+body.board-route:has(.bingo.scroll) { height: auto; overflow: visible; }
+.bingo.scroll {
+  --sl: max(10px, env(safe-area-inset-left)); --sr: max(10px, env(safe-area-inset-right));
+  height: auto; min-height: 100vh; gap: 10px; padding: 0 var(--sr) max(16px, env(safe-area-inset-bottom)) var(--sl);
+  grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); grid-template-rows: none;
+}
+/* Size containment would collapse these auto-height boxes to 0. */
+.bingo.scroll .card { container-type: inline-size; padding: 10px; border-radius: 14px; }
+.bingo.scroll .card h2 { height: 36px; font-size: 17px; }
+.bingo.scroll .tiles { flex: none; gap: 6px; grid-template-columns: repeat(4, 1fr); grid-template-rows: none; grid-auto-rows: 88px; }
+.bingo.scroll .tile { border-radius: 10px; scroll-margin: 150px 0 16px; }
+.bingo.scroll .tile svg { width: 26px; height: 26px; }
+/* 14cqw keeps the longest word ("Mountainside") unclipped on 360px phones. */
+.bingo.scroll .tile .nm { margin-top: 4px; max-width: 96%; font-size: min(12.5px, 14cqw); }
+.bingo.scroll .hero {
+  grid-column: 1 / -1; position: sticky; top: 0; z-index: 5; margin: 0 calc(-1 * var(--sr)) 0 calc(-1 * var(--sl));
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 2px 10px; text-align: left;
+  grid-template-areas: 'back logo dot' 'title title count' 'meter meter meter' 'ticker ticker ticker';
+  padding: env(safe-area-inset-top) calc(var(--sr) + 4px) 10px calc(var(--sl) + 4px);
+  border-width: 0 0 1px; border-radius: 0 0 16px 16px;
+  background: #0b0d22c8; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.bingo.scroll .hero-bar { display: contents; font-size: 12px; }
+.bingo.scroll .hero-bar a { grid-area: back; display: flex; align-items: center; min-width: 44px; min-height: 44px; font-size: 28px; }
+.bingo.scroll .hero-bar a span { display: none; }
+.bingo.scroll .relay-dot { grid-area: dot; min-height: 44px; }
+.bingo.scroll .logo { grid-area: logo; justify-self: center; font-size: 17px; white-space: nowrap; }
+.bingo.scroll .logo .l2 { display: inline; font-size: 1em; margin-left: 0.35em; }
+.bingo.scroll .build-title { grid-area: title; min-width: 0; max-width: none; font-size: 15px; }
+.bingo.scroll .count { grid-area: count; font-size: 18px; }
+.bingo.scroll .meter { grid-area: meter; width: 100%; height: 6px; margin: 4px 0; }
+.bingo.scroll .ticker { grid-area: ticker; max-width: none; font-size: 13px; line-height: 22px; }
+.ticker.jump { cursor: pointer; }
+
 @media (prefers-reduced-motion: reduce) {
   .tile.fresh, .relay-dot.live i, .hero.blackout .logo .l2, .spin { animation: none; }
 }

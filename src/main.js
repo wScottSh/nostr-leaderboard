@@ -200,7 +200,7 @@ function boardHtml(c) {
     `<a class="tile" data-key="${s.key}" title="${esc(`${courseName(s.course)}: ${s.name}`)}">${STAR_SVG}<span class="nm">${esc(s.label)}</span></a>`;
   return `
     <section class="card hero">
-      <nav class="hero-bar"><a href="#/">‹ all builds</a><span class="relay-dot" title=""><i></i><span></span></span></nav>
+      <nav class="hero-bar"><a href="#/">‹<span> all builds</span></a><span class="relay-dot" title=""><i></i><span></span></span></nav>
       <div class="logo">${[...'MARIO 64'].map((ch, i) => `<span style="color:${LOGO_COLORS[i % 4]}">${ch}</span>`).join('')}<span class="l2">BINGO</span></div>
       <div class="build-title">${esc(buildTitle(c))}${c.listed || state.allowlist.length === 0 ? '' : ` ${listedBadge(c)}`}</div>
       <div class="count"><span class="n">0</span><small> / ${TOTAL_STARS}</small></div>
@@ -217,7 +217,9 @@ function boardHtml(c) {
 }
 
 const SHAPES = [[4, 2], [2, 4], [8, 1], [3, 3]];
-/** Picks card columns and tile shape that give the biggest tiles for the window. */
+// Below this best-tile score labels clip, so the board scrolls instead of filling the screen.
+const READABLE = 42;
+/** Picks card columns and tile shape that give the biggest tiles for the window, or scroll mode if none are readable. */
 function fit() {
   if (!boardView) return;
   const W = innerWidth, H = innerHeight, N = GROUPS.length + 1;
@@ -244,7 +246,9 @@ function fit() {
   const el = boardView.el;
   const vars = { cols: best.k, rows: best.r, ta: best.a, tb: best.b, g: `${best.g}px`, tg: `${best.tg}px`, p: `${best.p}px`, hdr: `${best.hdr}px` };
   for (const [n, v] of Object.entries(vars)) el.style.setProperty(`--${n}`, v);
-  el.querySelector('.hero').style.gridColumn = `span ${Math.min(best.k, 1 + best.spare)}`;
+  const scroll = best.score < READABLE;
+  el.classList.toggle('scroll', scroll);
+  el.querySelector('.hero').style.gridColumn = scroll ? '' : `span ${Math.min(best.k, 1 + best.spare)}`;
 }
 
 function tickerText(c, collected) {
@@ -257,6 +261,21 @@ function tickerText(c, collected) {
   }
   if (loading()) return 'connecting to relays…';
   return collected ? 'blackout the board together' : 'no stars yet · blackout the board together';
+}
+
+function pop(tile) {
+  tile.classList.remove('fresh');
+  void tile.offsetWidth;
+  tile.classList.add('fresh');
+}
+
+/** Brings the build's newest claim into view, since on a scrolling board it can land off-screen. */
+function showLatest() {
+  const run = boardView && state.latest.get(boardView.key);
+  const tile = run && boardView.el.querySelector(`.tile[data-key="${run.course}-${run.keyId}"]`);
+  if (!tile) return;
+  tile.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  pop(tile);
 }
 
 function syncBoard(c) {
@@ -273,9 +292,7 @@ function syncBoard(c) {
       // Renders are coalesced, so whether a star is news is decided by when
       // its claims arrived (ingest), not by when this sync runs.
       if (!boardView.collected.has(key) && claims.get(key).some((run) => state.liveIds.has(run.id))) {
-        tile.classList.remove('fresh');
-        void tile.offsetWidth;
-        tile.classList.add('fresh');
+        pop(tile);
       }
     } else tile.removeAttribute('href');
   }
@@ -290,7 +307,9 @@ function syncBoard(c) {
   hero.classList.toggle('blackout', collected === TOTAL_STARS);
   hero.querySelector('.n').textContent = collected;
   hero.querySelector('.meter i').style.width = `${(collected / TOTAL_STARS) * 100}%`;
-  hero.querySelector('.ticker').textContent = tickerText(c, collected);
+  const ticker = hero.querySelector('.ticker');
+  ticker.textContent = tickerText(c, collected);
+  ticker.classList.toggle('jump', state.latest.has(c.key));
   const relay = relaySummary();
   const dot = hero.querySelector('.relay-dot');
   dot.className = `relay-dot ${relay.level}`;
@@ -420,6 +439,7 @@ function render() {
 }
 
 document.addEventListener('click', (e) => {
+  if (e.target.closest('.bingo .ticker')) showLatest();
   const action = e.target.closest('[data-action]')?.dataset.action;
   if (action === 'save-relays' || action === 'reset-relays') {
     if (action === 'reset-relays') localStorage.removeItem(RELAYS_KEY);
